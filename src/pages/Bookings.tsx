@@ -15,6 +15,7 @@ export default function Bookings() {
   const [calculation, setCalculation] = useState<CalculationResult | null>(null);
   const [conflictResult, setConflictResult] = useState<{ hasConflict: boolean; conflictingBookings: Booking[] } | null>(null);
   const [checkingConflict, setCheckingConflict] = useState(false);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [formData, setFormData] = useState<CreateBookingRequest>({
     siteId: '',
     customerName: '',
@@ -87,7 +88,19 @@ export default function Bookings() {
   };
 
   useEffect(() => {
-    if (isModalOpen && formData.siteId && formData.checkIn && formData.checkOut) {
+    if (formData.checkIn && formData.checkOut) {
+      const checkInDate = new Date(formData.checkIn);
+      const checkOutDate = new Date(formData.checkOut);
+      if (checkOutDate <= checkInDate) {
+        setDateError('退房日期必须晚于入住日期');
+      } else {
+        setDateError(null);
+      }
+    }
+  }, [formData.checkIn, formData.checkOut]);
+
+  useEffect(() => {
+    if (isModalOpen && formData.siteId && formData.checkIn && formData.checkOut && !dateError) {
       const check = async () => {
         setCheckingConflict(true);
         const [conflict, calc] = await Promise.all([
@@ -107,11 +120,18 @@ export default function Bookings() {
       };
       check();
     }
-  }, [isModalOpen, formData.siteId, formData.checkIn, formData.checkOut, formData.hasElectricity, formData.hasWater, formData.hasSewer, selectedSite?.type, checkConflict, calculateFee]);
+  }, [isModalOpen, formData.siteId, formData.checkIn, formData.checkOut, formData.hasElectricity, formData.hasWater, formData.hasSewer, selectedSite?.type, checkConflict, calculateFee, dateError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (conflictResult?.hasConflict) {
+      return;
+    }
+    
+    const checkInDate = new Date(formData.checkIn);
+    const checkOutDate = new Date(formData.checkOut);
+    if (checkOutDate <= checkInDate) {
+      alert('退房日期必须晚于入住日期');
       return;
     }
     
@@ -459,10 +479,17 @@ export default function Bookings() {
               <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
                 入住天数
               </label>
-              <div className="input bg-zinc-50 dark:bg-zinc-800/50 border-dashed">
-                {formData.checkIn && formData.checkOut
-                  ? `${getDaysBetween(formData.checkIn, formData.checkOut)} 天`
-                  : '请选择日期'}
+              <div className={`input border-dashed ${
+                dateError 
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-800' 
+                  : 'bg-zinc-50 dark:bg-zinc-800/50'
+              }`}>
+                {dateError 
+                  ? <span className="text-red-600 dark:text-red-400">{dateError}</span>
+                  : formData.checkIn && formData.checkOut
+                    ? `${getDaysBetween(formData.checkIn, formData.checkOut)} 天`
+                    : '请选择日期'
+                }
               </div>
             </div>
           </div>
@@ -474,7 +501,7 @@ export default function Bookings() {
               </label>
               <input
                 type="date"
-                className="input"
+                className={`input ${dateError ? 'border-red-300 dark:border-red-800' : ''}`}
                 value={formData.checkIn}
                 min={getTodayDateString()}
                 onChange={(e) => setFormData({ ...formData, checkIn: e.target.value })}
@@ -487,12 +514,15 @@ export default function Bookings() {
               </label>
               <input
                 type="date"
-                className="input"
+                className={`input ${dateError ? 'border-red-300 dark:border-red-800' : ''}`}
                 value={formData.checkOut}
                 min={formData.checkIn || getTodayDateString()}
                 onChange={(e) => setFormData({ ...formData, checkOut: e.target.value })}
                 required
               />
+              {dateError && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{dateError}</p>
+              )}
             </div>
           </div>
 
@@ -610,32 +640,33 @@ export default function Bookings() {
               
               <div className="space-y-2 text-sm">
                 {calculation.segments.map((seg, idx) => (
-                  <div key={idx} className="flex justify-between text-zinc-600 dark:text-zinc-400">
-                    <span>
-                      {getRateTypeName(seg.rate.type)} - {formatDate(seg.startDate)} 至 {formatDate(seg.endDate)} ({seg.days}天)
-                    </span>
-                    <span>{formatCurrency(seg.rate.pricePerDay * seg.days)}</span>
+                  <div key={idx} className="space-y-1">
+                    <div className="flex justify-between text-zinc-600 dark:text-zinc-400 font-medium">
+                      <span>
+                        {getRateTypeName(seg.rate.type)} - {formatDate(seg.startDate)} 至 {formatDate(seg.endDate)} ({seg.days}天)
+                      </span>
+                      <span>{formatCurrency(seg.rate.pricePerDay * seg.days)}</span>
+                    </div>
+                    {calculation.hasElectricity && seg.rate.electricityRate > 0 && (
+                      <div className="flex justify-between text-zinc-500 dark:text-zinc-500 text-xs pl-4">
+                        <span>电力接驳费 × {seg.days}天 × {formatCurrency(seg.rate.electricityRate)}</span>
+                        <span>{formatCurrency(seg.rate.electricityRate * seg.days)}</span>
+                      </div>
+                    )}
+                    {calculation.hasWater && seg.rate.waterRate > 0 && (
+                      <div className="flex justify-between text-zinc-500 dark:text-zinc-500 text-xs pl-4">
+                        <span>供水接驳费 × {seg.days}天 × {formatCurrency(seg.rate.waterRate)}</span>
+                        <span>{formatCurrency(seg.rate.waterRate * seg.days)}</span>
+                      </div>
+                    )}
+                    {calculation.hasSewer && seg.rate.sewerRate > 0 && (
+                      <div className="flex justify-between text-zinc-500 dark:text-zinc-500 text-xs pl-4">
+                        <span>排污接驳费 × {seg.days}天 × {formatCurrency(seg.rate.sewerRate)}</span>
+                        <span>{formatCurrency(seg.rate.sewerRate * seg.days)}</span>
+                      </div>
+                    )}
                   </div>
                 ))}
-                
-                {calculation.electricityFee > 0 && (
-                  <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
-                    <span>电力接驳费 ({calculation.totalDays}天)</span>
-                    <span>{formatCurrency(calculation.electricityFee)}</span>
-                  </div>
-                )}
-                {calculation.waterFee > 0 && (
-                  <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
-                    <span>供水接驳费 ({calculation.totalDays}天)</span>
-                    <span>{formatCurrency(calculation.waterFee)}</span>
-                  </div>
-                )}
-                {calculation.sewerFee > 0 && (
-                  <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
-                    <span>排污接驳费 ({calculation.totalDays}天)</span>
-                    <span>{formatCurrency(calculation.sewerFee)}</span>
-                  </div>
-                )}
                 
                 <div className="pt-2 mt-2 border-t border-green-200 dark:border-green-800 flex justify-between font-semibold text-lg text-green-800 dark:text-green-400">
                   <span>合计</span>
@@ -656,7 +687,7 @@ export default function Bookings() {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={checkingConflict || conflictResult?.hasConflict || !formData.siteId}
+              disabled={checkingConflict || conflictResult?.hasConflict || !formData.siteId || !!dateError}
             >
               确认预订
             </button>

@@ -157,10 +157,14 @@ export const useStore = create<AppState>((set, get) => ({
 
   cancelBooking: async (id) => {
     try {
-      await bookingApi.cancel(id);
+      const result = await bookingApi.cancel(id);
+      const booking = result.booking;
       set(state => ({
         bookings: state.bookings.map(b => 
           b.id === id ? { ...b, status: 'cancelled' as const } : b
+        ),
+        bills: state.bills.map(bill => 
+          bill.id === booking.billId ? { ...bill, status: 'refunded' as const } : bill
         ),
       }));
       get().setNotification({ type: 'success', message: '预订已取消，时段已释放' });

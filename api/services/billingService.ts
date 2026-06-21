@@ -70,19 +70,25 @@ export const billingService = {
     const segments = this.splitIntoRateSegments(checkIn, checkOut, siteType);
     
     let siteFee = 0;
+    let electricityFee = 0;
+    let waterFee = 0;
+    let sewerFee = 0;
     let totalDays = 0;
-    
-    const site = siteDal.getAll().find(s => s.type === siteType);
-    const sampleRate = segments.length > 0 ? segments[0].rate : null;
     
     for (const segment of segments) {
       siteFee += segment.rate.pricePerDay * segment.days;
       totalDays += segment.days;
+      
+      if (hasElectricity) {
+        electricityFee += segment.rate.electricityRate * segment.days;
+      }
+      if (hasWater) {
+        waterFee += segment.rate.waterRate * segment.days;
+      }
+      if (hasSewer) {
+        sewerFee += segment.rate.sewerRate * segment.days;
+      }
     }
-    
-    const electricityFee = hasElectricity && sampleRate ? sampleRate.electricityRate * totalDays : 0;
-    const waterFee = hasWater && sampleRate ? sampleRate.waterRate * totalDays : 0;
-    const sewerFee = hasSewer && sampleRate ? sampleRate.sewerRate * totalDays : 0;
     
     const subtotal = siteFee;
     const total = subtotal + electricityFee + waterFee + sewerFee;
@@ -96,6 +102,9 @@ export const billingService = {
       subtotal,
       total,
       totalDays,
+      hasElectricity,
+      hasWater,
+      hasSewer,
     };
   },
 
@@ -114,37 +123,41 @@ export const billingService = {
       });
     }
     
-    if (calculation.electricityFee > 0) {
-      const electricityRate = calculation.segments[0]?.rate.electricityRate || 0;
-      items.push({
-        description: '电力接驳费',
-        type: 'electricity',
-        quantity: calculation.totalDays,
-        unitPrice: electricityRate,
-        amount: calculation.electricityFee,
-      });
-    }
-    
-    if (calculation.waterFee > 0) {
-      const waterRate = calculation.segments[0]?.rate.waterRate || 0;
-      items.push({
-        description: '供水接驳费',
-        type: 'water',
-        quantity: calculation.totalDays,
-        unitPrice: waterRate,
-        amount: calculation.waterFee,
-      });
-    }
-    
-    if (calculation.sewerFee > 0) {
-      const sewerRate = calculation.segments[0]?.rate.sewerRate || 0;
-      items.push({
-        description: '排污接驳费',
-        type: 'sewer',
-        quantity: calculation.totalDays,
-        unitPrice: sewerRate,
-        amount: calculation.sewerFee,
-      });
+    for (const segment of calculation.segments) {
+      const rateTypeName = this.getRateTypeName(segment.rate.type);
+      
+      if (calculation.hasElectricity && segment.rate.electricityRate > 0) {
+        items.push({
+          description: `电力接驳费 - ${rateTypeName}`,
+          type: 'electricity',
+          quantity: segment.days,
+          unitPrice: segment.rate.electricityRate,
+          amount: segment.rate.electricityRate * segment.days,
+          period: `${segment.startDate} 至 ${segment.endDate}`,
+        });
+      }
+      
+      if (calculation.hasWater && segment.rate.waterRate > 0) {
+        items.push({
+          description: `供水接驳费 - ${rateTypeName}`,
+          type: 'water',
+          quantity: segment.days,
+          unitPrice: segment.rate.waterRate,
+          amount: segment.rate.waterRate * segment.days,
+          period: `${segment.startDate} 至 ${segment.endDate}`,
+        });
+      }
+      
+      if (calculation.hasSewer && segment.rate.sewerRate > 0) {
+        items.push({
+          description: `排污接驳费 - ${rateTypeName}`,
+          type: 'sewer',
+          quantity: segment.days,
+          unitPrice: segment.rate.sewerRate,
+          amount: segment.rate.sewerRate * segment.days,
+          period: `${segment.startDate} 至 ${segment.endDate}`,
+        });
+      }
     }
     
     return items;

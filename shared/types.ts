@@ -95,6 +95,9 @@ export interface CalculationResult {
   subtotal: number;
   total: number;
   totalDays: number;
+  hasElectricity: boolean;
+  hasWater: boolean;
+  hasSewer: boolean;
 }
 
 export interface CreateBookingRequest {
